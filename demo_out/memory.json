@@ -1,0 +1,9 @@
+[
+  {
+    "id": "mem-1-1786723325731",
+    "content": "在当前目录创建一个 hello.py 文件，内容是一个打印 Hello, World! 的 Python 程序。",
+    "source_session": "demo",
+    "tags": [],
+    "created_at": 1786723325731
+  }
+]

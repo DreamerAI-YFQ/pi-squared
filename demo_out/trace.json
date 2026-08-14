@@ -1,0 +1,53 @@
+{
+  "events": [
+    {
+      "kind": "turn_start",
+      "timestamp": 1786723325731
+    },
+    {
+      "kind": "assistant_message",
+      "timestamp": 1786723327333,
+      "text": ""
+    },
+    {
+      "kind": "llm_call",
+      "timestamp": 1786723327333,
+      "model": "deepseek-chat",
+      "tokens": 820,
+      "cost": 0.00027452
+    },
+    {
+      "kind": "tool_call_start",
+      "timestamp": 1786723327333,
+      "tool": "write",
+      "args": {
+        "path": "hello.py",
+        "content": "print(\"Hello, World!\")\n"
+      }
+    },
+    {
+      "kind": "tool_call",
+      "timestamp": 1786723327335,
+      "tool": "write",
+      "isError": false
+    },
+    {
+      "kind": "turn_start",
+      "timestamp": 1786723327335
+    },
+    {
+      "kind": "assistant_message",
+      "timestamp": 1786723328914,
+      "text": "我已经在**当前目录**创建了 `hello.py` 文件，内容是一个打印 `Hello, World!` 的 Python 程序。\n\n文件内容如下：\n```python\nprint(\"Hello, World!\")\n```\n\n你可以通过运行 `python hello.py` 或 `python3 hello.py` 来执行它，程序会输出 `Hello, World!`。"
+    },
+    {
+      "kind": "llm_call",
+      "timestamp": 1786723328914,
+      "model": "deepseek-chat",
+      "tokens": 916,
+      "cost": 0.00030957
+    }
+  ],
+  "total_tokens": 1736,
+  "total_cost": 0.00058409
+}

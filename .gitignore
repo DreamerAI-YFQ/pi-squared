@@ -1,0 +1,8 @@
+# 敏感信息
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
