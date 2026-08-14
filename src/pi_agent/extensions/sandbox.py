@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 
+from pi_agent.harness.env import decode_output
 from pi_agent.harness.result import Result, err, ok
 
 
@@ -45,12 +46,11 @@ class LocalSandbox(Sandbox):
                 shell=True,
                 cwd=self._tmpdir,  # 关键：命令在沙箱目录里执行
                 capture_output=True,
-                text=True,
             )
             return ok(
                 SandboxResult(
-                    stdout=result.stdout,
-                    stderr=result.stderr,
+                    stdout=decode_output(result.stdout),
+                    stderr=decode_output(result.stderr),
                     exit_code=result.returncode,
                 )
             )

@@ -11,6 +11,21 @@ from pi_agent.harness.result import Result, err, ok
 FileKind = Literal["file", "directory", "other"]
 
 
+def decode_output(data: bytes) -> str:
+    """解码子进程输出：UTF-8 → GBK → 替换。
+
+    Windows 上 subprocess 默认用 locale（中文系统是 GBK）解码，
+    遇到 UTF-8 输出（如 git/ls 的中文文件名）会直接 UnicodeDecodeError。
+    因此一律按 bytes 读取，再按常见编码回退解码。
+    """
+    for enc in ("utf-8", "gbk"):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
 @dataclass
 class FileInfo:
     """文件元数据（对应 pi 的 FileInfo）。"""
@@ -168,13 +183,12 @@ class LocalExecutionEnv:
                 shell=True,
                 cwd=cwd or self.cwd,
                 capture_output=True,
-                text=True,
                 timeout=timeout,
             )
             return ok(
                 ShellResult(
-                    stdout=result.stdout,
-                    stderr=result.stderr,
+                    stdout=decode_output(result.stdout),
+                    stderr=decode_output(result.stderr),
                     exit_code=result.returncode,
                 )
             )
