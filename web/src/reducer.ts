@@ -90,20 +90,16 @@ export function reduce(state: ChatState, action: UiAction): ChatState {
         const id = String(msg.timestamp);
         const exists = state.items.some((i) => i.kind === "turn" && i.id === id);
         if (exists) return state;
+        // content 可能是 string（faux/历史恢复）或 array（toolCall/text 混合）
+        const rawBlocks = Array.isArray(msg.content) ? msg.content : [];
+        const toolCalls = rawBlocks
+          .filter((c) => c.type === "toolCall")
+          .map((c) => ({ id: c.id, name: c.name, args: c.arguments as Record<string, unknown> }));
         return {
           ...state,
           items: [
             ...state.items,
-            {
-              kind: "turn",
-              id,
-              text,
-              toolCalls: msg.content
-                .filter((c) => c.type === "toolCall")
-                .map((c) => (c as { id: string; name: string; arguments: Record<string, unknown> }))
-                .map((c) => ({ id: c.id, name: c.name, args: c.arguments })),
-              running: false,
-            },
+            { kind: "turn", id, text, toolCalls, running: false },
           ],
         };
       }

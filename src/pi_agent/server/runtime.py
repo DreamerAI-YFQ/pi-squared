@@ -71,7 +71,12 @@ class SessionRuntime:
 
         env = LocalExecutionEnv(cwd=str(workspace))
         self.session_path.parent.mkdir(parents=True, exist_ok=True)
-        session = Session(JsonlSessionStorage.create(str(self.session_path), session_id=session_id))
+        # 关键：文件已存在（重启挂载/重开）时用 open 回放历史；新建才用 create 写 header
+        if self.session_path.exists():
+            storage = JsonlSessionStorage.open(str(self.session_path))
+        else:
+            storage = JsonlSessionStorage.create(str(self.session_path), session_id=session_id)
+        session = Session(storage)
         tools = [create_read_tool(), create_write_tool(), create_edit_tool(), create_bash_tool()]
 
         # 治理（M2）：路径守卫 + 审批 + 审计，通过 agent_loop 钩子接入
