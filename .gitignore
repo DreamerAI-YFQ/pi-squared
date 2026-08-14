@@ -1,6 +1,9 @@
 # 敏感信息
 .env
 
+# 项目规划（仅在本地维护）
+PLAN.md
+
 # Python
 __pycache__/
 *.pyc
