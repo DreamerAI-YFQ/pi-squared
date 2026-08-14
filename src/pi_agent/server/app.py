@@ -100,6 +100,14 @@ def create_app(data_dir: Path, workspace_root: Path, provider: str = "auto") -> 
         if not runtime.approvals.resolve(approval_id, body.approved):
             raise HTTPException(410, "审批请求不存在或已处理")
 
+    @app.get("/api/sessions/{session_id}/observability")
+    async def get_observability(session_id: str):
+        """观测快照：span 树 + token/成本（O 层）。"""
+        runtime = registry.open_session(session_id)
+        if runtime is None:
+            raise HTTPException(404, "会话不存在")
+        return runtime.observability_snapshot()
+
     @app.post("/api/sessions/{session_id}/messages")
     async def send_message(session_id: str, body: MessageBody):
         runtime = registry.open_session(session_id)

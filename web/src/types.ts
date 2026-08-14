@@ -62,6 +62,24 @@ export interface AgentToolResult {
 
 // ============ Agent 事件（SSE data 载荷） ============
 
+export interface Span {
+  name: string;
+  start_ms: number;
+  duration_ms?: number;
+  attrs: Record<string, unknown>;
+  children: Span[];
+}
+
+export interface ObservabilityData {
+  model: string;
+  spans: Span[];
+  events: { kind: string; timestamp: number; [key: string]: unknown }[];
+  totalTokens: number;
+  totalCost: number;
+  llmCalls: number;
+  toolCalls: number;
+}
+
 export type AgentEvent =
   | { type: "agent_start" }
   | { type: "agent_end"; messages: Message[] }

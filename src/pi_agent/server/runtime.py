@@ -14,6 +14,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from pi_agent.extensions.observability import Observability
 from pi_agent.harness.env import LocalExecutionEnv
 from pi_agent.harness.harness import AgentHarness
 from pi_agent.harness.session.context import build_session_context
@@ -54,14 +55,19 @@ class SessionRuntime:
         workspace: Path,
         stream_fn: StreamFn,
         auto_approve: set[str] | None = None,
+        model_name: str = "faux",
     ):
         self.id = session_id
         self.data_dir = data_dir
         self.workspace = workspace
         self.session_path = data_dir / "sessions" / session_id / "session.jsonl"
         self.audit_path = data_dir / "sessions" / session_id / "audit.jsonl"
+        self.trace_path = data_dir / "sessions" / session_id / "trace.json"
+        self.model_name = model_name
         self._queue: asyncio.Queue | None = None
         self._busy = False
+        # 可观测性（M3）：span 树 + token/成本，由事件流驱动
+        self.obs = Observability()
 
         env = LocalExecutionEnv(cwd=str(workspace))
         self.session_path.parent.mkdir(parents=True, exist_ok=True)
@@ -92,9 +98,78 @@ class SessionRuntime:
         return self._busy
 
     async def _on_event(self, event) -> None:
-        """Agent 事件 listener：推入当前活跃的 SSE 队列。"""
+        """Agent 事件 listener：观测追踪 + 推入当前活跃的 SSE 队列。"""
+        self._obs_track(event)
         if self._queue is not None:
             await self._queue.put(event)
+
+    def _obs_track(self, event) -> None:
+        """把 Agent 事件流翻译成 span 树 + 指标（O 层）。
+
+        层级：agent_prompt → turn → tool:{name}
+        LLM usage 挂到 turn span 的 attrs 上（一个 turn 恰好一次 LLM 调用）。
+        """
+        kind = getattr(event, "type", None)
+        if kind == "agent_start":
+            self.obs.start_span("agent_prompt")
+        elif kind == "turn_start":
+            self.obs.start_span("turn")
+        elif kind == "message_end":
+            msg = getattr(event, "message", None)
+            if getattr(msg, "role", None) == "assistant" and getattr(msg, "usage", None):
+                usage = msg.usage
+                self.obs.record_usage(self.model_name, usage.prompt_tokens, usage.completion_tokens)
+                self.obs.annotate(tokens=usage.total_tokens)
+        elif kind == "tool_execution_start":
+            self.obs.start_span(
+                f"tool:{event.toolName}", tool=event.toolName, args=str(event.args)[:200]
+            )
+        elif kind == "tool_execution_end":
+            self.obs.record_tool(event.toolName, event.isError)
+            self.obs.annotate(isError=event.isError)
+            self.obs.end_span()  # tool span
+        elif kind == "turn_end":
+            self.obs.end_span()  # turn span
+        elif kind == "agent_end":
+            self.obs.end_span()  # root span
+            self.obs.save(str(self.trace_path))
+
+    def observability_snapshot(self) -> dict:
+        """观测快照：内存态优先，runtime 重挂载后回退读 trace.json。"""
+        if self.obs.events or self.obs.spans:
+            return {
+                "model": self.model_name,
+                "spans": self.obs.spans,
+                "events": self.obs.events,
+                "totalTokens": self.obs.total_tokens,
+                "totalCost": round(self.obs.total_cost, 6),
+                "llmCalls": len(self.obs.llm_calls()),
+                "toolCalls": len(self.obs.tool_calls()),
+            }
+        if self.trace_path.exists():
+            try:
+                data = json.loads(self.trace_path.read_text(encoding="utf-8"))
+                data.setdefault("model", self.model_name)
+                return {
+                    "model": data.get("model", self.model_name),
+                    "spans": data.get("spans", []),
+                    "events": data.get("events", []),
+                    "totalTokens": data.get("total_tokens", 0),
+                    "totalCost": round(data.get("total_cost", 0.0), 6),
+                    "llmCalls": sum(1 for e in data.get("events", []) if e.get("kind") == "llm_call"),
+                    "toolCalls": sum(1 for e in data.get("events", []) if e.get("kind") == "tool_call"),
+                }
+            except (json.JSONDecodeError, OSError):
+                pass
+        return {
+            "model": self.model_name,
+            "spans": [],
+            "events": [],
+            "totalTokens": 0,
+            "totalCost": 0.0,
+            "llmCalls": 0,
+            "toolCalls": 0,
+        }
 
     async def _emit_event(self, event: dict) -> None:
         """server 层事件（审批等）：同样进 SSE 队列。"""
@@ -180,6 +255,8 @@ class Registry:
         self.workspace_root = workspace_root
         self._runtimes: dict[str, SessionRuntime] = {}
         self._stream_fn, self.provider_mode = resolve_stream_fn(provider)
+        # 观测/成本计算用的模型名（与 PRICING 表对齐）
+        self.model_name = "deepseek-chat" if self.provider_mode == "deepseek" else "faux"
         self.policy_config = policy_config or PolicyConfig(data_dir)
         self.policy_config.load()
 
@@ -190,6 +267,7 @@ class Registry:
         runtime = SessionRuntime(
             session_id, self.data_dir, workspace, self._stream_fn,
             auto_approve=set(self.policy_config.auto_approve),
+            model_name=self.model_name,
         )
         self._runtimes[session_id] = runtime
         return runtime
@@ -209,6 +287,7 @@ class Registry:
         runtime = SessionRuntime(
             session_id, self.data_dir, workspace, self._stream_fn,
             auto_approve=set(self.policy_config.auto_approve),
+            model_name=self.model_name,
         )
         self._runtimes[session_id] = runtime
         return runtime

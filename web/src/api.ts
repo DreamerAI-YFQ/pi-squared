@@ -34,6 +34,13 @@ export async function fetchMessages(sessionId: string): Promise<Message[]> {
   return data.messages;
 }
 
+import type { ObservabilityData } from "./types";
+
+/** 拉取会话观测快照（span 树 + token/成本）。 */
+export async function fetchObservability(sessionId: string): Promise<ObservabilityData> {
+  return json<ObservabilityData>(await fetch(`/api/sessions/${sessionId}/observability`));
+}
+
 /** 响应审批：批准或拒绝挂起中的工具调用。 */
 export async function resolveApproval(sessionId: string, approvalId: string, approved: boolean): Promise<void> {
   const resp = await fetch(`/api/sessions/${sessionId}/approvals/${approvalId}`, {

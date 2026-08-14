@@ -62,6 +62,11 @@ class Observability:
         span = self._span_stack.pop()
         span["duration_ms"] = int(time.time() * 1000) - span["start_ms"]
 
+    def annotate(self, **attrs) -> None:
+        """更新当前 span 的属性（如把 token 用量挂到 turn span 上）。"""
+        if self._span_stack:
+            self._span_stack[-1]["attrs"].update(attrs)
+
     @property
     def spans(self) -> list[dict]:
         return list(self._spans)

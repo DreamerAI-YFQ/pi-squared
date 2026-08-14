@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useState } from "react";
 import { ChatView } from "./components/ChatView";
 import { Composer } from "./components/Composer";
+import { ObservabilityPanel } from "./components/ObservabilityPanel";
 import { Sidebar } from "./components/Sidebar";
 import { createSession, fetchConfig, fetchMessages, fetchSessions, sendMessage } from "./api";
 import { initialState, itemsFromHistory, reduce, userItem } from "./reducer";
@@ -11,6 +12,8 @@ export default function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [state, dispatch] = useReducer(reduce, initialState);
+  const [obsOpen, setObsOpen] = useState(false);
+  const [obsRefresh, setObsRefresh] = useState(0);
 
   const refreshSessions = useCallback(async () => {
     setSessions(await fetchSessions());
@@ -51,6 +54,7 @@ export default function App() {
       } catch (exc) {
         dispatch({ type: "server_error", message: String(exc) });
       }
+      setObsRefresh((k) => k + 1); // 消息完成后刷新观测面板
       refreshSessions().catch(() => {});
     },
     [activeId, refreshSessions],
@@ -65,15 +69,25 @@ export default function App() {
         onSelect={(id) => openSession(id).catch(() => {})}
         onCreate={handleCreate}
       />
-      <div className="main-col">
+      <div className={`main-col ${obsOpen ? "with-obs" : ""}`}>
         <header className="topbar">
           <span className="topbar-title">
             {activeId ? sessions.find((s) => s.id === activeId)?.title ?? "会话" : "新会话"}
           </span>
+          <button
+            className={`obs-toggle ${obsOpen ? "active" : ""}`}
+            onClick={() => setObsOpen((v) => !v)}
+            title="观测面板（span 树 / 成本）"
+          >
+            观测
+          </button>
         </header>
         <ChatView sessionId={activeId} items={state.items} running={state.running} error={state.error} />
         <Composer running={state.running} onSend={handleSend} />
       </div>
+      {obsOpen && (
+        <ObservabilityPanel sessionId={activeId} refreshKey={obsRefresh} onClose={() => setObsOpen(false)} />
+      )}
     </div>
   );
 }

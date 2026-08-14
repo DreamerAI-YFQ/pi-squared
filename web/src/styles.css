@@ -389,6 +389,157 @@ body,
   font-size: 12px;
 }
 
+/* ============ 观测面板 ============ */
+
+.main-col.with-obs {
+  max-width: calc(820px - 300px);
+}
+
+.obs-panel {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  width: 300px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 16px;
+  overflow-y: auto;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+  z-index: 50;
+}
+
+.obs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.obs-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.obs-close {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.obs-model {
+  margin: 6px 0 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+}
+
+.obs-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.obs-card {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.obs-value {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.obs-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.obs-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.obs-empty {
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+  padding: 24px 0;
+}
+
+.span-node {
+  font-size: 12px;
+}
+
+.span-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.span-name {
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-weight: 600;
+}
+
+.span-name.error {
+  color: #ff3b30;
+}
+
+.span-tokens {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.span-duration {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.span-bar-track {
+  height: 3px;
+  background: var(--bg);
+  border-radius: 2px;
+  margin: 3px 0 4px;
+  overflow: hidden;
+}
+
+.span-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  opacity: 0.55;
+}
+
+.span-bar.error {
+  background: #ff3b30;
+}
+
+.obs-toggle {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.obs-toggle.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 /* ============ 运行指示 / 错误 ============ */
 
 .running-indicator {
