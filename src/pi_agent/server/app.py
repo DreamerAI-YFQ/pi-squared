@@ -25,6 +25,19 @@ class CreateSessionBody(BaseModel):
     workspace: str | None = None
 
 
+# 成对引号（含中文引号）剥离：用户从聊天/文档复制路径时常带入
+_QUOTE_PAIRS = [('"', '"'), ("'", "'"), ("\u201c", "\u201d"), ("\u2018", "\u2019")]
+
+
+def _clean_workspace(raw: str) -> str:
+    s = raw.strip()
+    for a, b in _QUOTE_PAIRS:
+        if len(s) >= 2 and s.startswith(a) and s.endswith(b):
+            s = s[1:-1].strip()
+            break
+    return s
+
+
 class MessageBody(BaseModel):
     text: str
 
@@ -61,7 +74,7 @@ def create_app(data_dir: Path, workspace_root: Path, provider: str = "auto") -> 
     @app.post("/api/sessions")
     async def create_session(body: CreateSessionBody | None = None):
         """创建会话。body.workspace 可指定本机项目目录（M4），留空用默认隔离工作区。"""
-        workspace = body.workspace if body and body.workspace else None
+        workspace = _clean_workspace(body.workspace) if body and body.workspace else None
         if workspace:
             p = Path(workspace)
             if not p.is_dir():

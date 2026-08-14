@@ -44,6 +44,23 @@ def test_create_session_rejects_missing_dir(client, tmp_path: Path):
     assert resp.status_code == 422
 
 
+def test_create_session_strips_quotes(client, tmp_path: Path):
+    """路径带成对引号/空格（从聊天复制）→ 自动清洗后可用。"""
+    project_dir = tmp_path / "quoted"
+    project_dir.mkdir()
+
+    cases = [
+        f'"{project_dir}"',          # ASCII 双引号
+        f"'{project_dir}'",          # ASCII 单引号
+        f"\u201c{project_dir}\u201d",  # 中文双引号
+        f'  "{project_dir}"  ',      # 前后空白
+    ]
+    for raw in cases:
+        resp = client.post("/api/sessions", json={"workspace": raw})
+        assert resp.status_code == 200, f"清洗失败：{raw}"
+        assert Path(resp.json()["workspace"]) == project_dir
+
+
 def test_create_session_without_body_uses_default(client):
     """不带 body → 默认隔离工作区，meta.json 不落盘。"""
     resp = client.post("/api/sessions")
