@@ -9,3 +9,11 @@ __pycache__/
 *.pyc
 *.egg-info/
 .pytest_cache/
+.venv/
+
+# 运行数据（会话/工作区）
+.pi-data/
+
+# 前端
+web/node_modules/
+web/dist/

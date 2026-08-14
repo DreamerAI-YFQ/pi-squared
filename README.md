@@ -61,7 +61,36 @@ pip install -e .
 DEEPSEEK_API_KEY=your_key
 ```
 
+没有 key 也能跑：网关会自动降级到 faux provider（模拟演示）。
 `.env` 已被 `.gitignore` 忽略，不会进入仓库。
+
+---
+
+## Web UI
+
+一条命令启动本地网关，浏览器即可使用：
+
+```bash
+pi-squared serve          # 默认 http://127.0.0.1:8000
+```
+
+- **单进程**：FastAPI 同时提供前端静态页、REST API 与 SSE 事件流。
+- **会话管理**：多会话、历史恢复（从 JSONL 重放）。
+- **实时事件流**：Agent 的每一步（工具调用、执行结果、回合结束）以 SSE 事件驱动 UI。
+- **本地落盘**：会话 JSONL 与工作区文件全部写入本机数据目录（默认 `~/.pi-squared/`）。
+
+```text
+浏览器 ── HTTP/SSE ──► FastAPI 网关 ──► pi_agent 核心 ──► 本机文件系统
+```
+
+前端（`web/`，React + TypeScript）二次开发：
+
+```bash
+cd web
+npm install
+npm run dev       # Vite 开发服务器，/api 代理到 127.0.0.1:8000
+npm run build     # 产物 web/dist 由 pi-squared serve 直接托管
+```
 
 ---
 
@@ -119,6 +148,8 @@ src/pi_agent/
     ├── eval.py                # V 评估
     └── governance.py          # G 治理
 
+src/pi_agent/server/           # Web 网关（FastAPI + SSE）
+web/                           # Web UI（React + TypeScript + Vite）
 tests/                         # 各阶段对应测试
 ```
 
