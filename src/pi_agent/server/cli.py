@@ -19,6 +19,10 @@ def main(argv: list[str] | None = None) -> None:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
     serve.add_argument("--data", default=str(Path.home() / ".pi-squared"), help="数据目录（会话/工作区）")
+    serve.add_argument(
+        "--provider", choices=["auto", "faux", "deepseek"], default="auto",
+        help="LLM provider（auto=有 key 用 deepseek，否则 faux）",
+    )
 
     args = parser.parse_args(argv)
 
@@ -28,7 +32,7 @@ def main(argv: list[str] | None = None) -> None:
         data_dir.mkdir(parents=True, exist_ok=True)
         workspace_root.mkdir(parents=True, exist_ok=True)
 
-        app = create_app(data_dir, workspace_root)
+        app = create_app(data_dir, workspace_root, provider=args.provider)
         print(f"[pi-squared] 数据目录   {data_dir}")
         print(f"[pi-squared] 工作区根   {workspace_root}")
         print(f"[pi-squared] 服务地址   http://{args.host}:{args.port}")

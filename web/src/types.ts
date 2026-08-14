@@ -71,6 +71,9 @@ export type AgentEvent =
   | { type: "message_end"; message: Message }
   | { type: "tool_execution_start"; toolCallId: string; toolName: string; args: Record<string, unknown> }
   | { type: "tool_execution_end"; toolCallId: string; toolName: string; result: AgentToolResult; isError: boolean }
+  // server 层治理事件（M2）
+  | { type: "approval_request"; approvalId: string; toolName: string; args: Record<string, unknown> }
+  | { type: "approval_resolved"; approvalId: string; approved: boolean; reason: string }
   | { type: "server_error"; message: string };
 
 // ============ REST ============

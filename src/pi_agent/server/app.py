@@ -25,9 +25,17 @@ class MessageBody(BaseModel):
     text: str
 
 
-def create_app(data_dir: Path, workspace_root: Path) -> FastAPI:
+class ApprovalBody(BaseModel):
+    approved: bool
+
+
+class PolicyBody(BaseModel):
+    autoApprove: list[str]
+
+
+def create_app(data_dir: Path, workspace_root: Path, provider: str = "auto") -> FastAPI:
     app = FastAPI(title="Pi²", version="0.1.0")
-    registry = Registry(data_dir, workspace_root)
+    registry = Registry(data_dir, workspace_root, provider=provider)
 
     # 开发模式：Vite (5173) 访问后端 API
     app.add_middleware(
@@ -71,6 +79,26 @@ def create_app(data_dir: Path, workspace_root: Path) -> FastAPI:
             raise HTTPException(404, "会话不存在")
         messages = await runtime.load_messages()
         return {"id": session_id, "messages": messages}
+
+    @app.get("/api/policy")
+    async def get_policy():
+        return {"autoApprove": sorted(registry.policy_config.auto_approve)}
+
+    @app.put("/api/policy")
+    async def put_policy(body: PolicyBody):
+        """更新免审批工具列表（全局默认，持久化到 config.json）。"""
+        registry.policy_config.auto_approve = set(body.autoApprove)
+        registry.policy_config.save()
+        return {"autoApprove": sorted(registry.policy_config.auto_approve)}
+
+    @app.post("/api/sessions/{session_id}/approvals/{approval_id}")
+    async def resolve_approval(session_id: str, approval_id: str, body: ApprovalBody):
+        """前端响应审批：批准或拒绝挂起中的工具调用。"""
+        runtime = registry.get(session_id)
+        if runtime is None:
+            raise HTTPException(404, "会话不存在")
+        if not runtime.approvals.resolve(approval_id, body.approved):
+            raise HTTPException(410, "审批请求不存在或已处理")
 
     @app.post("/api/sessions/{session_id}/messages")
     async def send_message(session_id: str, body: MessageBody):

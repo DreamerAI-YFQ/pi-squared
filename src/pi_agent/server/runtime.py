@@ -9,6 +9,7 @@
 import asyncio
 import json
 import os
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +23,7 @@ from pi_agent.harness.tools.bash import create_bash_tool
 from pi_agent.harness.tools.edit import create_edit_tool
 from pi_agent.harness.tools.read import create_read_tool
 from pi_agent.harness.tools.write import create_write_tool
+from pi_agent.server.policy import ApprovalManager, PolicyConfig, make_hooks
 from pi_agent.stream_fn import StreamFn
 
 SYSTEM_PROMPT = (
@@ -43,13 +45,21 @@ class SessionInfo:
 
 
 class SessionRuntime:
-    """单个会话的运行时：harness + 事件队列。"""
+    """单个会话的运行时：harness + 事件队列 + 治理（审批/审计）。"""
 
-    def __init__(self, session_id: str, data_dir: Path, workspace: Path, stream_fn: StreamFn):
+    def __init__(
+        self,
+        session_id: str,
+        data_dir: Path,
+        workspace: Path,
+        stream_fn: StreamFn,
+        auto_approve: set[str] | None = None,
+    ):
         self.id = session_id
         self.data_dir = data_dir
         self.workspace = workspace
         self.session_path = data_dir / "sessions" / session_id / "session.jsonl"
+        self.audit_path = data_dir / "sessions" / session_id / "audit.jsonl"
         self._queue: asyncio.Queue | None = None
         self._busy = False
 
@@ -58,12 +68,21 @@ class SessionRuntime:
         session = Session(JsonlSessionStorage.create(str(self.session_path), session_id=session_id))
         tools = [create_read_tool(), create_write_tool(), create_edit_tool(), create_bash_tool()]
 
+        # 治理（M2）：路径守卫 + 审批 + 审计，通过 agent_loop 钩子接入
+        self.auto_approve: set[str] = set(auto_approve) if auto_approve is not None else {"read"}
+        self.approvals = ApprovalManager(emit=self._emit_event, audit=self._write_audit)
+        before_tool_call, after_tool_call = make_hooks(
+            workspace=workspace, approvals=self.approvals, auto_approve=self.auto_approve
+        )
+
         self._harness = AgentHarness(
             stream_fn=stream_fn,
             env=env,
             session=session,
             harness_tools=tools,
             system_prompt=SYSTEM_PROMPT,
+            before_tool_call=before_tool_call,
+            after_tool_call=after_tool_call,
             event_listeners=[self._on_event],
         )
         self._session = session
@@ -76,6 +95,18 @@ class SessionRuntime:
         """Agent 事件 listener：推入当前活跃的 SSE 队列。"""
         if self._queue is not None:
             await self._queue.put(event)
+
+    async def _emit_event(self, event: dict) -> None:
+        """server 层事件（审批等）：同样进 SSE 队列。"""
+        if self._queue is not None:
+            await self._queue.put(event)
+
+    def _write_audit(self, kind: str, **record) -> None:
+        """审计落盘：blocked / approval_request / approval_result / tool_result。"""
+        entry = {"kind": kind, "timestamp": int(time.time() * 1000), **record}
+        self.audit_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.audit_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
 
     async def load_messages(self) -> list[dict]:
         """从 JSONL 重放会话历史（恢复用）。"""
@@ -119,32 +150,47 @@ class SessionRuntime:
             self._busy = False
 
 
-def resolve_stream_fn() -> tuple[StreamFn, str]:
-    """根据环境选择 provider：有 key 用 DeepSeek，否则 faux（开箱即用）。"""
+def resolve_stream_fn(provider: str = "auto") -> tuple[StreamFn, str]:
+    """选择 provider：faux / deepseek / auto（auto=有 key 用 deepseek，否则 faux）。"""
+    from pi_agent.providers.faux import faux_stream
+
+    if provider == "faux":
+        return faux_stream, "faux"
     from pi_agent.providers.openai import _load_dotenv, deepseek_stream
 
+    if provider == "deepseek":
+        return deepseek_stream, "deepseek"
     _load_dotenv()
     if os.environ.get("DEEPSEEK_API_KEY"):
         return deepseek_stream, "deepseek"
-    from pi_agent.providers.faux import faux_stream
-
     return faux_stream, "faux"
 
 
 class Registry:
-    """所有会话运行时的注册表 + 磁盘目录扫描。"""
+    """所有会话运行时的注册表 + 磁盘目录扫描 + 治理配置。"""
 
-    def __init__(self, data_dir: Path, workspace_root: Path):
+    def __init__(
+        self,
+        data_dir: Path,
+        workspace_root: Path,
+        policy_config: PolicyConfig | None = None,
+        provider: str = "auto",
+    ):
         self.data_dir = data_dir
         self.workspace_root = workspace_root
         self._runtimes: dict[str, SessionRuntime] = {}
-        self._stream_fn, self.provider_mode = resolve_stream_fn()
+        self._stream_fn, self.provider_mode = resolve_stream_fn(provider)
+        self.policy_config = policy_config or PolicyConfig(data_dir)
+        self.policy_config.load()
 
     def create_session(self) -> SessionRuntime:
         session_id = str(uuid.uuid4())[:8]
         workspace = self.workspace_root / session_id
         workspace.mkdir(parents=True, exist_ok=True)
-        runtime = SessionRuntime(session_id, self.data_dir, workspace, self._stream_fn)
+        runtime = SessionRuntime(
+            session_id, self.data_dir, workspace, self._stream_fn,
+            auto_approve=set(self.policy_config.auto_approve),
+        )
         self._runtimes[session_id] = runtime
         return runtime
 
@@ -160,7 +206,10 @@ class Registry:
             return None
         workspace = self.workspace_root / session_id
         workspace.mkdir(parents=True, exist_ok=True)
-        runtime = SessionRuntime(session_id, self.data_dir, workspace, self._stream_fn)
+        runtime = SessionRuntime(
+            session_id, self.data_dir, workspace, self._stream_fn,
+            auto_approve=set(self.policy_config.auto_approve),
+        )
         self._runtimes[session_id] = runtime
         return runtime
 

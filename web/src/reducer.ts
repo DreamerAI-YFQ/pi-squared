@@ -22,7 +22,16 @@ export interface TurnItem {
   running: boolean;
 }
 
-export type ChatItem = ToolItem | TurnItem;
+export interface ApprovalItem {
+  kind: "approval";
+  id: string; // approvalId
+  toolName: string;
+  args: Record<string, unknown>;
+  status: "pending" | "approved" | "denied";
+  reason: string | null;
+}
+
+export type ChatItem = ToolItem | TurnItem | ApprovalItem;
 
 export interface ChatState {
   items: ChatItem[];
@@ -128,6 +137,29 @@ export function reduce(state: ChatState, action: UiAction): ChatState {
                   .map((c) => (c as TextContent).text)
                   .join("\n"),
               }
+            : i,
+        ),
+      };
+    }
+
+    case "approval_request": {
+      const item: ApprovalItem = {
+        kind: "approval",
+        id: event.approvalId,
+        toolName: event.toolName,
+        args: event.args,
+        status: "pending",
+        reason: null,
+      };
+      return { ...state, items: [...state.items, item] };
+    }
+
+    case "approval_resolved": {
+      return {
+        ...state,
+        items: state.items.map((i) =>
+          i.kind === "approval" && i.id === event.approvalId
+            ? { ...i, status: event.approved ? "approved" : "denied", reason: event.reason }
             : i,
         ),
       };

@@ -34,6 +34,30 @@ export async function fetchMessages(sessionId: string): Promise<Message[]> {
   return data.messages;
 }
 
+/** 响应审批：批准或拒绝挂起中的工具调用。 */
+export async function resolveApproval(sessionId: string, approvalId: string, approved: boolean): Promise<void> {
+  const resp = await fetch(`/api/sessions/${sessionId}/approvals/${approvalId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ approved }),
+  });
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => "");
+    throw new Error(`HTTP ${resp.status}: ${body || resp.statusText}`);
+  }
+}
+
+/** 把工具加入免审批列表（"记住此选择"）。 */
+export async function rememberAutoApprove(toolName: string): Promise<void> {
+  const data = await json<{ autoApprove: string[] }>(await fetch("/api/policy"));
+  const next = Array.from(new Set([...data.autoApprove, toolName]));
+  await fetch("/api/policy", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ autoApprove: next }),
+  });
+}
+
 /**
  * 发送消息并以回调形式消费 SSE 事件流。
  * 用 fetch 而非 EventSource：EventSource 不支持 POST，

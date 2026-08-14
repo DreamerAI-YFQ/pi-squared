@@ -1,7 +1,9 @@
-import type { ToolItem, TurnItem } from "../reducer";
+import type { ApprovalItem, ToolItem, TurnItem } from "../reducer";
+import { ApprovalCard } from "./ApprovalCard";
 
 interface Props {
-  items: (ToolItem | TurnItem)[];
+  sessionId: string | null;
+  items: (ToolItem | TurnItem | ApprovalItem)[];
   running: boolean;
   error: string | null;
 }
@@ -11,7 +13,7 @@ function isUser(item: TurnItem): boolean {
   return item.id.startsWith("user-") || item.id.startsWith("u-");
 }
 
-export function ChatView({ items, running, error }: Props) {
+export function ChatView({ sessionId, items, running, error }: Props) {
   return (
     <main className="chat">
       <div className="messages">
@@ -24,6 +26,8 @@ export function ChatView({ items, running, error }: Props) {
         {items.map((item, i) =>
           item.kind === "tool" ? (
             <ToolCard key={`${item.id}-${i}`} item={item} />
+          ) : item.kind === "approval" ? (
+            <ApprovalCard key={item.id} sessionId={sessionId} item={item} />
           ) : (
             <Bubble key={item.id} item={item} />
           ),

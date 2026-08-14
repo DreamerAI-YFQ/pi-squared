@@ -77,11 +77,18 @@ pi-squared serve          # 默认 http://127.0.0.1:8000
 - **单进程**：FastAPI 同时提供前端静态页、REST API 与 SSE 事件流。
 - **会话管理**：多会话、历史恢复（从 JSONL 重放）。
 - **实时事件流**：Agent 的每一步（工具调用、执行结果、回合结束）以 SSE 事件驱动 UI。
+- **治理（M2）**：路径 allowlist 硬边界 + 写操作审批弹窗 + JSONL 审计。
 - **本地落盘**：会话 JSONL 与工作区文件全部写入本机数据目录（默认 `~/.pi-squared/`）。
 
 ```text
 浏览器 ── HTTP/SSE ──► FastAPI 网关 ──► pi_agent 核心 ──► 本机文件系统
+                          │
+                          ├─ 路径守卫：工具只能碰 workspace 内的路径（越界直接 block）
+                          ├─ 审批：write/edit/bash 执行前挂起，浏览器弹窗批准/拒绝
+                          └─ 审计：blocked / approval / tool_result 全记录 audit.jsonl
 ```
+
+默认策略：`read` 免审批；`write` / `edit` / `bash` 需要人工批准（批准时可勾选"记住"，写入 `config.json` 的 autoApprove 列表）。审批等待上限 300 秒，超时视为拒绝。
 
 前端（`web/`，React + TypeScript）二次开发：
 

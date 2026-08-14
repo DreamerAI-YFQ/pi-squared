@@ -71,7 +71,7 @@ export default function App() {
             {activeId ? sessions.find((s) => s.id === activeId)?.title ?? "会话" : "新会话"}
           </span>
         </header>
-        <ChatView items={state.items} running={state.running} error={state.error} />
+        <ChatView sessionId={activeId} items={state.items} running={state.running} error={state.error} />
         <Composer running={state.running} onSend={handleSend} />
       </div>
     </div>

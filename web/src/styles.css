@@ -297,6 +297,98 @@ body,
   overflow-y: auto;
 }
 
+/* ============ 审批卡片 ============ */
+
+.approval-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid #ff9f0a;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+
+.approval-card.approved {
+  border-left-color: #34c759;
+}
+
+.approval-card.denied {
+  border-left-color: #ff3b30;
+}
+
+.approval-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.approval-tool {
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin-left: 8px;
+  font-weight: 500;
+}
+
+.approval-args {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.approval-remember {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.approval-actions button {
+  border: none;
+  border-radius: 999px;
+  padding: 7px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.approval-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.approval-actions .approve {
+  background: var(--accent);
+  color: #fff;
+}
+
+.approval-actions .deny {
+  background: rgba(255, 59, 48, 0.12);
+  color: #c1271f;
+}
+
+.approval-reason {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 /* ============ 运行指示 / 错误 ============ */
 
 .running-indicator {
