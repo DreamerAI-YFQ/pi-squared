@@ -260,20 +260,44 @@ class Registry:
         self.policy_config = policy_config or PolicyConfig(data_dir)
         self.policy_config.load()
 
-    def create_session(self) -> SessionRuntime:
+    def create_session(self, workspace_override: str | None = None) -> SessionRuntime:
+        """创建会话。workspace_override：用户指定的本机项目目录（M4），
+        不传则使用默认隔离工作区 workspaces/{id}。自定义目录写入 meta.json 持久化。"""
         session_id = str(uuid.uuid4())[:8]
-        workspace = self.workspace_root / session_id
+        custom_ws: Path | None = None
+        if workspace_override:
+            custom_ws = Path(workspace_override)
+        workspace = custom_ws or self.workspace_root / session_id
         workspace.mkdir(parents=True, exist_ok=True)
         runtime = SessionRuntime(
             session_id, self.data_dir, workspace, self._stream_fn,
             auto_approve=set(self.policy_config.auto_approve),
             model_name=self.model_name,
         )
+        if custom_ws is not None:
+            meta_path = self.data_dir / "sessions" / session_id / "meta.json"
+            meta_path.parent.mkdir(parents=True, exist_ok=True)
+            meta_path.write_text(
+                json.dumps({"workspace": str(custom_ws)}, ensure_ascii=False), encoding="utf-8"
+            )
         self._runtimes[session_id] = runtime
         return runtime
 
     def get(self, session_id: str) -> SessionRuntime | None:
         return self._runtimes.get(session_id)
+
+    def _workspace_for(self, session_id: str) -> Path:
+        """会话的 workspace：自定义目录（meta.json）优先，回退默认隔离区。"""
+        meta_path = self.data_dir / "sessions" / session_id / "meta.json"
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                ws = meta.get("workspace")
+                if ws:
+                    return Path(ws)
+            except (json.JSONDecodeError, OSError):
+                pass
+        return self.workspace_root / session_id
 
     def open_session(self, session_id: str) -> SessionRuntime | None:
         """打开（或重新挂载）磁盘上已有的会话。"""
@@ -282,7 +306,7 @@ class Registry:
         path = self.data_dir / "sessions" / session_id / "session.jsonl"
         if not path.exists():
             return None
-        workspace = self.workspace_root / session_id
+        workspace = self._workspace_for(session_id)
         workspace.mkdir(parents=True, exist_ok=True)
         runtime = SessionRuntime(
             session_id, self.data_dir, workspace, self._stream_fn,
@@ -332,7 +356,7 @@ class Registry:
                             texts = [c.get("text", "") for c in content if isinstance(c, dict)]
                             title = ("".join(texts))[:50] or title
         stat = jsonl.stat()
-        workspace = self.workspace_root / session_id
+        workspace = self._workspace_for(session_id)
         return SessionInfo(
             id=session_id,
             title=title,

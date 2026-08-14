@@ -21,6 +21,10 @@ from pi_agent.server.runtime import Registry
 _DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
 
 
+class CreateSessionBody(BaseModel):
+    workspace: str | None = None
+
+
 class MessageBody(BaseModel):
     text: str
 
@@ -55,8 +59,14 @@ def create_app(data_dir: Path, workspace_root: Path, provider: str = "auto") -> 
         }
 
     @app.post("/api/sessions")
-    async def create_session():
-        runtime = registry.create_session()
+    async def create_session(body: CreateSessionBody | None = None):
+        """创建会话。body.workspace 可指定本机项目目录（M4），留空用默认隔离工作区。"""
+        workspace = body.workspace if body and body.workspace else None
+        if workspace:
+            p = Path(workspace)
+            if not p.is_dir():
+                raise HTTPException(422, f"workspace 目录不存在：{workspace}")
+        runtime = registry.create_session(workspace_override=workspace)
         return {"id": runtime.id, "workspace": str(runtime.workspace)}
 
     @app.get("/api/sessions")

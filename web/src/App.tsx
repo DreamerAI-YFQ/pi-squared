@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useState } from "react";
 import { ChatView } from "./components/ChatView";
 import { Composer } from "./components/Composer";
+import { NewSessionDialog } from "./components/NewSessionDialog";
 import { ObservabilityPanel } from "./components/ObservabilityPanel";
 import { Sidebar } from "./components/Sidebar";
 import { createSession, fetchConfig, fetchMessages, fetchSessions, sendMessage } from "./api";
@@ -14,6 +15,7 @@ export default function App() {
   const [state, dispatch] = useReducer(reduce, initialState);
   const [obsOpen, setObsOpen] = useState(false);
   const [obsRefresh, setObsRefresh] = useState(0);
+  const [newDialogOpen, setNewDialogOpen] = useState(false);
 
   const refreshSessions = useCallback(async () => {
     setSessions(await fetchSessions());
@@ -33,11 +35,17 @@ export default function App() {
     }
   }, []);
 
-  const handleCreate = useCallback(async () => {
-    const { id } = await createSession();
-    await refreshSessions();
-    setActiveId(id);
-    dispatch({ type: "ui_reset" });
+  const handleCreate = useCallback(async (workspace: string | null) => {
+    try {
+      const { id } = await createSession(workspace);
+      await refreshSessions();
+      setActiveId(id);
+      dispatch({ type: "ui_reset" });
+    } catch (exc) {
+      dispatch({ type: "server_error", message: String(exc) });
+    } finally {
+      setNewDialogOpen(false);
+    }
   }, [refreshSessions]);
 
   const handleSend = useCallback(
@@ -67,13 +75,20 @@ export default function App() {
         activeId={activeId}
         provider={config?.provider ?? ""}
         onSelect={(id) => openSession(id).catch(() => {})}
-        onCreate={handleCreate}
+        onCreate={() => setNewDialogOpen(true)}
       />
       <div className={`main-col ${obsOpen ? "with-obs" : ""}`}>
         <header className="topbar">
-          <span className="topbar-title">
-            {activeId ? sessions.find((s) => s.id === activeId)?.title ?? "会话" : "新会话"}
-          </span>
+          <div className="topbar-left">
+            <span className="topbar-title">
+              {activeId ? sessions.find((s) => s.id === activeId)?.title ?? "会话" : "新会话"}
+            </span>
+            {activeId && (
+              <span className="topbar-ws" title={sessions.find((s) => s.id === activeId)?.workspace}>
+                {sessions.find((s) => s.id === activeId)?.workspace}
+              </span>
+            )}
+          </div>
           <button
             className={`obs-toggle ${obsOpen ? "active" : ""}`}
             onClick={() => setObsOpen((v) => !v)}
@@ -87,6 +102,9 @@ export default function App() {
       </div>
       {obsOpen && (
         <ObservabilityPanel sessionId={activeId} refreshKey={obsRefresh} onClose={() => setObsOpen(false)} />
+      )}
+      {newDialogOpen && (
+        <NewSessionDialog onCreate={(ws) => handleCreate(ws)} onClose={() => setNewDialogOpen(false)} />
       )}
     </div>
   );

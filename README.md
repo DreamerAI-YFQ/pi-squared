@@ -79,6 +79,7 @@ pi-squared serve          # 默认 http://127.0.0.1:8000
 - **实时事件流**：Agent 的每一步（工具调用、执行结果、回合结束）以 SSE 事件驱动 UI。
 - **治理（M2）**：路径 allowlist 硬边界 + 写操作审批弹窗 + JSONL 审计。
 - **观测面板（M3）**：span 树（agent_prompt → turn → tool）、token/成本实时累计，`trace.json` 落盘。
+- **自定义工作区（M4）**：新建会话时可指定本机项目目录，Agent 直接在你的真实代码库里干活。
 - **本地落盘**：会话 JSONL 与工作区文件全部写入本机数据目录（默认 `~/.pi-squared/`）。
 
 ```text

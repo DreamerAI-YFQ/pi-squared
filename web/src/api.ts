@@ -25,8 +25,18 @@ export async function fetchSessions(): Promise<SessionSummary[]> {
   return json(await fetch("/api/sessions"));
 }
 
-export async function createSession(): Promise<{ id: string }> {
-  return json(await fetch("/api/sessions", { method: "POST" }));
+export async function createSession(workspace?: string | null): Promise<{ id: string; workspace: string }> {
+  const resp = await fetch("/api/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(workspace ? { workspace } : {}),
+  });
+  if (resp.status === 422) {
+    const detail = (await resp.json()).detail;
+    throw new Error(detail || "workspace 目录不存在");
+  }
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return json(await resp);
 }
 
 export async function fetchMessages(sessionId: string): Promise<Message[]> {

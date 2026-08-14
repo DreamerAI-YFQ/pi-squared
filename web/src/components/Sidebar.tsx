@@ -8,6 +8,13 @@ interface Props {
   onCreate: () => void;
 }
 
+/** workspace 显示名：目录末段 + 自定义目录标识。 */
+function workspaceName(path: string): string {
+  const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
+  const last = parts[parts.length - 1] ?? path;
+  return last;
+}
+
 export function Sidebar({ sessions, activeId, provider, onSelect, onCreate }: Props) {
   return (
     <aside className="sidebar">
@@ -29,7 +36,10 @@ export function Sidebar({ sessions, activeId, provider, onSelect, onCreate }: Pr
             onClick={() => onSelect(s.id)}
           >
             <div className="session-title">{s.title}</div>
-            <div className="session-meta">{new Date(s.updatedAt).toLocaleString()}</div>
+            <div className="session-meta">
+              {new Date(s.updatedAt).toLocaleString()}
+              {s.workspace && <span className="session-ws"> · {workspaceName(s.workspace)}</span>}
+            </div>
           </button>
         ))}
       </div>
