@@ -127,6 +127,26 @@ def _validate_deferred_handles(entries: list[Entry]) -> None:
             _corrupt("invalid_deferred_handle", f"Deferred assistant entry {entry.id} does not carry a handle")
 
 
+def _validate_provisioned_entries(records: list[LaneRecord], entries_by_id: dict[str, Entry]) -> None:
+    """write_deferred provision 的 entry 若已实际写入，parent 必须与 provision 一致。"""
+    provisioned: dict[str, str | None] = {}
+    for record in records:
+        if record.type != "write_deferred":
+            continue
+        target = record.target.get("entry") if isinstance(record.target, dict) else None
+        if not isinstance(target, dict) or not target.get("id"):
+            _corrupt("invalid_deferred_handle", f"Write deferred {record.id} carries no provisioned entry")
+        provisioned[target["id"]] = target.get("parent_id")
+
+    for entry_id, parent_id in provisioned.items():
+        entry = entries_by_id.get(entry_id)
+        if entry is not None and entry.parent_id != parent_id:
+            _corrupt(
+                "provisioned_entry_mismatch",
+                f"Entry {entry_id} does not match the parent provisioned by its deferred write",
+            )
+
+
 def validate_record_log(slice: RecordLogSlice) -> None:
     """校验 record log 一致性，检测 12 种 corruption（不读 session 状态）。"""
     if len(slice.open_operations) > 1:
@@ -137,6 +157,7 @@ def validate_record_log(slice: RecordLogSlice) -> None:
 
     entries_by_id = {e.id: e for e in slice.entries}
     _validate_deferred_handles(slice.entries)
+    _validate_provisioned_entries(slice.records, entries_by_id)
 
     starts: dict[str, OperationStartedRecord] = {}
     finished_at: dict[str, int] = {}
