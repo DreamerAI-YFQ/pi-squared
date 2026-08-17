@@ -1,8 +1,9 @@
-from dataclasses import dataclass, field # 数据类
+from dataclasses import dataclass, field
+# 数据类：一种数据结构，用于存储和处理数据
 from typing import Annotated, Any, Awaitable, Callable, Literal, Union
-
+# 类型注解：用于注解变量的类型
 from pydantic import BaseModel, Field
-
+# pydantic：一个用于数据验证和模型构建的库
 
 # 停止原因：模型这一轮为什么结束（决定循环是否继续）
 StopReason = Literal["pending", "stop", "length", "toolUse", "error", "aborted", "deferred"]

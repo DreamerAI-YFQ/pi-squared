@@ -26,14 +26,19 @@ from pi_agent.types import ( # 导入智能体上下文、工具结果、消息�
 
 @dataclass # 定义智能循环配置类，包含流函数
 class AgentLoopConfig:
-    stream_fn: StreamFn
-    get_steering_messages: Callable[[], Awaitable[list[Message]]] | None = None  # steering 消息队列回调（运行中插入）
-    get_follow_up_messages: Callable[[], Awaitable[list[Message]]] | None = None  # followUp 消息队列回调（停止后继续）
-    before_tool_call: Callable[[ToolCall, dict], Awaitable[dict | None]] | None = None  # 工具执行前钩子（可 block）
-    after_tool_call: Callable[[ToolCall, AgentToolResult, bool], Awaitable[dict | None]] | None = None  # 工具执行后钩子（可覆写）
+    stream_fn: StreamFn # 流函数，用于处理模型输出
+    get_steering_messages: Callable[[], Awaitable[list[Message]]] | None = None  
+    # steering 消息队列回调（运行中插入），返回steering消息列表
+    get_follow_up_messages: Callable[[], Awaitable[list[Message]]] | None = None  
+    # followUp 消息队列回调（停止后继续），返回followUp消息列表
+    before_tool_call: Callable[[ToolCall, dict], Awaitable[dict | None]] | None = None  
+    # 工具执行前钩子（可 block），返回是否阻断执行
+    after_tool_call: Callable[[ToolCall, AgentToolResult, bool], Awaitable[dict | None]] | None = None  
+    # 工具执行后钩子（可覆写），返回是否覆写结果；StreamFn = Callable[[AgentContext], Awaitable[AssistantMessage]]
 
 
 Emit = Callable[[AgentEvent], Awaitable[None]] # 定义异步函数类型，接收事件，返回无，用于触发事件
+
 
 
 def now_ms() -> int: # 获取当前时间戳（毫秒级）
@@ -65,78 +70,79 @@ async def run_agent_loop( # 核心 ReAct 循环
         await emit(MessageEnd(message=prompt)) # 触发用户消息结束事件
 
     pending_messages: list[Message] = await config.get_steering_messages() if config.get_steering_messages else []
-    first_turn = True
+    # 获取 steering 消息队列，如果为空，则返回空列表，否则返回steering消息列表
+    first_turn = True # 第一回合标志
 
     # 外层循环：处理 follow-up（agent 本应停止后又来新消息）
     while True:
-        has_more_tool_calls = True
+        has_more_tool_calls = True # 有更多工具调用标志
 
         # 内层循环：处理工具调用 + steering（运行中插入消息）
-        while has_more_tool_calls or pending_messages:
-            if not first_turn:
-                await emit(TurnStart())
-            else:
-                first_turn = False
+        while has_more_tool_calls or pending_messages: # 如果还有工具调用或steering消息，则继续循环
+            if not first_turn: # 如果第二回合，则触发回合开始事件
+                await emit(TurnStart()) # 触发回合开始事件
+            else: # 如果第一回合，则不触发回合开始事件
+                first_turn = False # 第一回合标志
 
-            # 注入 pending 消息（steering 或 follow-up）
-            if pending_messages:
-                for msg in pending_messages:
-                    await emit(MessageStart(message=msg))
-                    await emit(MessageEnd(message=msg))
-                    current.messages.append(msg)
-                    new_messages.append(msg)
-                pending_messages = []
+            # 注入 pending 消息（steering 或 follow-up），如果steering消息不为空，则注入steering消息
+            if pending_messages: # 如果steering消息不为空，则注入steering消息
+                for msg in pending_messages: # 遍历steering消息
+                    await emit(MessageStart(message=msg)) # 触发消息开始事件
+                    await emit(MessageEnd(message=msg)) # 触发消息结束事件
+                    current.messages.append(msg) # 将消息添加到当前上下文消息列表
+                    new_messages.append(msg) # 将消息添加到新消息列表
+                pending_messages = [] # 清空steering消息列表，等待下一回合
 
             # 1. 调用模型（注入的 stream_fn）
-            assistant_msg = await config.stream_fn(current)
-            current.messages.append(assistant_msg)
-            new_messages.append(assistant_msg)
-            await emit(MessageStart(message=assistant_msg))
-            await emit(MessageEnd(message=assistant_msg))
+            assistant_msg = await config.stream_fn(current) # 调用流函数，获取助手消息
+            current.messages.append(assistant_msg) # 将助手消息添加到当前上下文
+            new_messages.append(assistant_msg) # 将助手消息添加到新消息列表
+            await emit(MessageStart(message=assistant_msg)) # 触发助手消息开始事件
+            await emit(MessageEnd(message=assistant_msg)) # 触发助手消息结束事件
 
             # 2. 提取模型要调用的工具
-            tool_calls = [c for c in assistant_msg.content if isinstance(c, ToolCall)]
-            tool_results: list[ToolResultMessage] = []
-            has_more_tool_calls = False
+            tool_calls = [c for c in assistant_msg.content if isinstance(c, ToolCall)] # 提取助手消息中的工具调用
+            tool_results: list[ToolResultMessage] = [] # 初始化工具结果列表
+            has_more_tool_calls = False # 没有更多工具调用标志
 
-            if tool_calls:
+            if tool_calls: # 如果工具调用不为空，则逐个执行工具
                 # 3. 逐个执行工具，把结果回填到上下文
                 for tool_call in tool_calls:
                     await emit(
-                        ToolExecutionStart(toolCallId=tool_call.id, toolName=tool_call.name, args=tool_call.arguments)
+                        ToolExecutionStart(toolCallId=tool_call.id, toolName=tool_call.name, args=tool_call.arguments) # 触发工具执行开始事件
                     )
-                    result, is_error = await execute_tool_call(current, tool_call, config.before_tool_call, config.after_tool_call)
+                    result, is_error = await execute_tool_call(current, tool_call, config.before_tool_call, config.after_tool_call) # 执行工具调用
                     await emit(
-                        ToolExecutionEnd(toolCallId=tool_call.id, toolName=tool_call.name, result=result, isError=is_error)
+                        ToolExecutionEnd(toolCallId=tool_call.id, toolName=tool_call.name, result=result, isError=is_error) # 触发工具执行结束事件
                     )
-                    tool_result_msg = ToolResultMessage(
+                    tool_result_msg = ToolResultMessage( # 创建工具结果消息
                         toolCallId=tool_call.id,
                         toolName=tool_call.name,
                         content=result.content,
                         isError=is_error,
-                        timestamp=now_ms(),
+                        timestamp=now_ms(), # 获取当前时间戳
                     )
-                    tool_results.append(tool_result_msg)
-                    current.messages.append(tool_result_msg)
-                    new_messages.append(tool_result_msg)
-                    await emit(MessageStart(message=tool_result_msg))
-                    await emit(MessageEnd(message=tool_result_msg))
-                has_more_tool_calls = True
+                    tool_results.append(tool_result_msg) # 将工具结果消息添加到工具结果列表
+                    current.messages.append(tool_result_msg) # 将工具结果消息添加到当前上下文
+                    new_messages.append(tool_result_msg) # 将工具结果消息添加到新消息列表
+                    await emit(MessageStart(message=tool_result_msg)) # 触发工具结果消息开始事件
+                    await emit(MessageEnd(message=tool_result_msg)) # 触发工具结果消息结束事件
+                has_more_tool_calls = True # 有更多工具调用标志
 
-            await emit(TurnEnd(message=assistant_msg, toolResults=tool_results))
+            await emit(TurnEnd(message=assistant_msg, toolResults=tool_results)) # 触发回合结束事件
 
             # poll steering 消息
-            pending_messages = await config.get_steering_messages() if config.get_steering_messages else []
+            pending_messages = await config.get_steering_messages() if config.get_steering_messages else [] # 获取steering消息列表
 
         # 外层：poll follow-up 消息
-        follow_up = await config.get_follow_up_messages() if config.get_follow_up_messages else []
-        if follow_up:
-            pending_messages = follow_up
-            continue
-        break
+        follow_up = await config.get_follow_up_messages() if config.get_follow_up_messages else [] # 获取followUp消息列表
+        if follow_up: # 如果followUp消息不为空，则继续循环
+            pending_messages = follow_up # 更新steering消息列表
+            continue # 继续循环
+        break # 退出循环
 
-    await emit(AgentEnd(messages=new_messages))
-    return new_messages
+    await emit(AgentEnd(messages=new_messages)) # 触发代理结束事件
+    return new_messages # 返回新消息列表
 
 
 async def execute_tool_call( # 执行单调用
